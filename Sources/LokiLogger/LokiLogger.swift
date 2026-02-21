@@ -58,6 +58,9 @@ public final class LokiLogger: @unchecked Sendable {
     ///   - maxBufferSize: Max buffer before dropping (default: 500).
     ///   - extraLabels: Custom labels for all entries (default: empty).
     ///   - deviceInfo: Device info for automatic labels (default: DeviceInfo()).
+    ///   - authentication: Authentication method for Loki requests (default: .none).
+    ///   - compressionEnabled: Whether to compress requests with gzip (default: false).
+    ///   - persistence: Persistence provider for offline storage (default: nil).
     ///   - session: URLSession for network requests (default: .shared).
     public static func configure(
         endpoint: URL,
@@ -69,6 +72,9 @@ public final class LokiLogger: @unchecked Sendable {
         maxBufferSize: Int = 500,
         extraLabels: [String: String] = [:],
         deviceInfo: (any DeviceInfoProviding)? = DeviceInfo(),
+        authentication: LokiAuthentication = .none,
+        compressionEnabled: Bool = false,
+        persistence: (any LogPersisting)? = nil,
         session: any URLSessionProtocol = URLSession.shared
     ) {
         let configuration: LokiConfiguration = LokiConfiguration(
@@ -80,7 +86,10 @@ public final class LokiLogger: @unchecked Sendable {
             maxRetries: maxRetries,
             maxBufferSize: maxBufferSize,
             extraLabels: extraLabels,
-            deviceInfo: deviceInfo
+            deviceInfo: deviceInfo,
+            authentication: authentication,
+            compressionEnabled: compressionEnabled,
+            persistence: persistence
         )
 
         let transport: LokiTransport = LokiTransport(
@@ -137,6 +146,15 @@ public final class LokiLogger: @unchecked Sendable {
     ///   - metadata: Optional key-value pairs for additional context.
     public static func error(_ message: String, metadata: [String: String] = [:]) {
         shared.log(level: .error, message: message, metadata: metadata)
+    }
+
+    /// Logs a critical message.
+    ///
+    /// - Parameters:
+    ///   - message: Log message content.
+    ///   - metadata: Optional key-value pairs for additional context.
+    public static func critical(_ message: String, metadata: [String: String] = [:]) {
+        shared.log(level: .critical, message: message, metadata: metadata)
     }
 
     /// Flushes all buffered log entries immediately.

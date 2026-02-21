@@ -24,7 +24,11 @@ public struct LokiConfiguration: Sendable {
     public let flushInterval: TimeInterval
 
     /// Maximum retry attempts for failed requests (default: 3).
-    public let maxRetries: Int
+    @available(*, deprecated, message: "Use retryConfiguration.maxRetries instead")
+    public var maxRetries: Int { retryConfiguration.maxRetries }
+
+    /// Retry configuration with exponential backoff settings.
+    public let retryConfiguration: RetryConfiguration
 
     /// Maximum buffer size before dropping oldest entries (default: 500).
     public let maxBufferSize: Int
@@ -34,6 +38,15 @@ public struct LokiConfiguration: Sendable {
 
     /// Device information provider for automatic device labels.
     public let deviceInfo: (any DeviceInfoProviding)?
+
+    /// Authentication method for Loki requests.
+    public let authentication: LokiAuthentication
+
+    /// Whether to compress request bodies with gzip.
+    public let compressionEnabled: Bool
+
+    /// Persistence provider for offline log storage.
+    public let persistence: (any LogPersisting)?
 
     // MARK: - Lifecycle
 
@@ -49,6 +62,10 @@ public struct LokiConfiguration: Sendable {
     ///   - maxBufferSize: Max buffer before dropping (default: 500).
     ///   - extraLabels: Custom labels for all entries (default: empty).
     ///   - deviceInfo: Device info provider for automatic device labels (default: DeviceInfo()).
+    ///   - authentication: Authentication method for Loki requests (default: .none).
+    ///   - compressionEnabled: Whether to compress requests with gzip (default: false).
+    ///   - persistence: Persistence provider for offline storage (default: nil).
+    ///   - retryConfiguration: Retry configuration with backoff settings (default: .default).
     public init(
         endpoint: URL,
         app: String,
@@ -58,16 +75,24 @@ public struct LokiConfiguration: Sendable {
         maxRetries: Int = 3,
         maxBufferSize: Int = 500,
         extraLabels: [String: String] = [:],
-        deviceInfo: (any DeviceInfoProviding)? = DeviceInfo()
+        deviceInfo: (any DeviceInfoProviding)? = DeviceInfo(),
+        authentication: LokiAuthentication = .none,
+        compressionEnabled: Bool = false,
+        persistence: (any LogPersisting)? = nil,
+        retryConfiguration: RetryConfiguration? = nil
     ) {
         self.endpoint = endpoint
         self.app = app
         self.environment = environment
         self.batchSize = batchSize
         self.flushInterval = flushInterval
-        self.maxRetries = maxRetries
         self.maxBufferSize = maxBufferSize
         self.extraLabels = extraLabels
         self.deviceInfo = deviceInfo
+        self.authentication = authentication
+        self.compressionEnabled = compressionEnabled
+        self.persistence = persistence
+        // Use provided retryConfiguration or create one from maxRetries for backward compatibility
+        self.retryConfiguration = retryConfiguration ?? RetryConfiguration(maxRetries: maxRetries)
     }
 }
