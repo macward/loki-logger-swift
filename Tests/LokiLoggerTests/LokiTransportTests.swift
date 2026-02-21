@@ -238,4 +238,118 @@ struct LokiTransportTests {
         #expect(stream["device_model"] == nil)
         #expect(stream["os_version"] == nil)
     }
+
+    // MARK: - Authentication Tests
+
+    @Test("Basic auth headers are included in request")
+    func basicAuthHeadersIncluded() async throws {
+        let session: MockURLSession = MockURLSession()
+        session.statusCode = 200
+
+        let configuration: LokiConfiguration = LokiConfiguration(
+            endpoint: endpoint,
+            app: "TestApp",
+            environment: "test",
+            authentication: .basic(username: "user", password: "pass")
+        )
+
+        let transport: LokiTransport = LokiTransport(
+            configuration: configuration,
+            session: session
+        )
+
+        let entry: LogEntry = LogEntry(level: .info, message: "Test")
+
+        try await transport.send([entry])
+
+        let request: URLRequest = session.capturedRequests.first!
+        let authHeader: String? = request.value(forHTTPHeaderField: "Authorization")
+
+        let expectedCredentials: String = "user:pass"
+        let expectedBase64: String = Data(expectedCredentials.utf8).base64EncodedString()
+
+        #expect(authHeader == "Basic \(expectedBase64)")
+    }
+
+    @Test("Bearer token headers are included in request")
+    func bearerTokenHeadersIncluded() async throws {
+        let session: MockURLSession = MockURLSession()
+        session.statusCode = 200
+
+        let token: String = "my-api-token"
+        let configuration: LokiConfiguration = LokiConfiguration(
+            endpoint: endpoint,
+            app: "TestApp",
+            environment: "test",
+            authentication: .bearer(token: token)
+        )
+
+        let transport: LokiTransport = LokiTransport(
+            configuration: configuration,
+            session: session
+        )
+
+        let entry: LogEntry = LogEntry(level: .info, message: "Test")
+
+        try await transport.send([entry])
+
+        let request: URLRequest = session.capturedRequests.first!
+        let authHeader: String? = request.value(forHTTPHeaderField: "Authorization")
+
+        #expect(authHeader == "Bearer \(token)")
+    }
+
+    @Test("Custom headers are included in request")
+    func customHeadersIncluded() async throws {
+        let session: MockURLSession = MockURLSession()
+        session.statusCode = 200
+
+        let configuration: LokiConfiguration = LokiConfiguration(
+            endpoint: endpoint,
+            app: "TestApp",
+            environment: "test",
+            authentication: .custom(headers: ["X-API-Key": "secret-key", "X-Tenant": "tenant-1"])
+        )
+
+        let transport: LokiTransport = LokiTransport(
+            configuration: configuration,
+            session: session
+        )
+
+        let entry: LogEntry = LogEntry(level: .info, message: "Test")
+
+        try await transport.send([entry])
+
+        let request: URLRequest = session.capturedRequests.first!
+
+        #expect(request.value(forHTTPHeaderField: "X-API-Key") == "secret-key")
+        #expect(request.value(forHTTPHeaderField: "X-Tenant") == "tenant-1")
+    }
+
+    @Test("No authentication does not add authorization header")
+    func noAuthNoHeader() async throws {
+        let session: MockURLSession = MockURLSession()
+        session.statusCode = 200
+
+        let configuration: LokiConfiguration = LokiConfiguration(
+            endpoint: endpoint,
+            app: "TestApp",
+            environment: "test",
+            authentication: .none
+        )
+
+        let transport: LokiTransport = LokiTransport(
+            configuration: configuration,
+            session: session
+        )
+
+        let entry: LogEntry = LogEntry(level: .info, message: "Test")
+
+        try await transport.send([entry])
+
+        let request: URLRequest = session.capturedRequests.first!
+        let authHeader: String? = request.value(forHTTPHeaderField: "Authorization")
+
+        #expect(authHeader == nil)
+    }
 }

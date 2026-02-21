@@ -187,6 +187,49 @@ struct LokiLoggerTests {
         #expect(stream["level"] == "error")
     }
 
+    @Test("Instance log with critical level")
+    func instanceLogCriticalLevel() async throws {
+        let session: MockURLSession = MockURLSession()
+        session.statusCode = 200
+
+        let configuration: LokiConfiguration = LokiConfiguration(
+            endpoint: endpoint,
+            app: "TestApp",
+            environment: "test",
+            batchSize: 100,
+            flushInterval: 60
+        )
+
+        let transport: LokiTransport = LokiTransport(
+            configuration: configuration,
+            session: session
+        )
+
+        let buffer: LogBuffer = LogBuffer(
+            transport: transport,
+            configuration: configuration
+        )
+
+        let logger: LokiLogger = LokiLogger(
+            buffer: buffer,
+            configuration: configuration
+        )
+
+        logger.log(level: .critical, message: "Critical message")
+
+        try await Task.sleep(nanoseconds: 100_000_000)
+        await buffer.flush()
+
+        #expect(session.capturedRequests.count == 1)
+
+        let body: Data = session.capturedRequests.first!.httpBody!
+        let json: [String: Any] = try JSONSerialization.jsonObject(with: body) as! [String: Any]
+        let streams: [[String: Any]] = json["streams"] as! [[String: Any]]
+        let stream: [String: String] = streams.first!["stream"] as! [String: String]
+
+        #expect(stream["level"] == "critical")
+    }
+
     @Test("Multiple logs are batched together")
     func multipleLogsBatched() async throws {
         let session: MockURLSession = MockURLSession()

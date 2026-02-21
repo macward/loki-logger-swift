@@ -40,20 +40,31 @@ public actor LogBuffer {
     // MARK: - Public Methods
 
     /// Starts the buffer's automatic flush timer.
-    public func start() {
+    ///
+    /// Also recovers any persisted entries from previous sessions.
+    public func start() async {
         guard !isRunning else { return }
         isRunning = true
+
+        // Recover persisted entries from previous session
+        await recoverPersistedEntries()
+
         startFlushTimer()
         observeBackgroundNotifications()
     }
 
     /// Stops the buffer and flushes any remaining entries.
+    ///
+    /// Persists any remaining entries if persistence is configured.
     public func stop() async {
         isRunning = false
         flushTask?.cancel()
         flushTask = nil
         removeBackgroundObserver()
         await flush()
+
+        // Persist any remaining entries that couldn't be sent
+        await persistRemainingEntries()
     }
 
     /// Adds a log entry to the buffer.
@@ -151,10 +162,16 @@ public actor LogBuffer {
             try await transport.send(entries)
         } catch {
             let newAttempts: Int = attempts + 1
-            if newAttempts < configuration.maxRetries {
+            if newAttempts < configuration.retryConfiguration.maxRetries {
+                // Calculate exponential backoff delay
+                let delay: TimeInterval = configuration.retryConfiguration.delay(forAttempt: attempts)
+                let delayNanoseconds: UInt64 = UInt64(delay * 1_000_000_000)
+                try? await Task.sleep(nanoseconds: delayNanoseconds)
                 retryQueue.append((entries: entries, attempts: newAttempts))
+            } else {
+                // Max retries exceeded - persist entries for later recovery
+                await persistFailedEntries(entries)
             }
-            // If max retries exceeded, entries are dropped
         }
     }
 
@@ -164,6 +181,50 @@ public actor LogBuffer {
 
         for retry in retries {
             await sendBatch(retry.entries, attempts: retry.attempts)
+        }
+    }
+
+    // MARK: - Persistence Methods
+
+    private func recoverPersistedEntries() async {
+        guard let persistence = configuration.persistence else { return }
+
+        do {
+            let recoveredEntries: [LogEntry] = try await persistence.loadAndClear()
+            if !recoveredEntries.isEmpty {
+                // Add recovered entries to the beginning of the buffer
+                buffer.insert(contentsOf: recoveredEntries, at: 0)
+            }
+        } catch {
+            // Recovery failure is not critical - log internally if needed
+        }
+    }
+
+    private func persistRemainingEntries() async {
+        guard let persistence = configuration.persistence else { return }
+
+        // Collect all remaining entries (buffer + retry queue)
+        var entriesToPersist: [LogEntry] = buffer
+        for retry in retryQueue {
+            entriesToPersist.append(contentsOf: retry.entries)
+        }
+
+        guard !entriesToPersist.isEmpty else { return }
+
+        do {
+            try await persistence.append(entriesToPersist)
+        } catch {
+            // Persistence failure - entries may be lost
+        }
+    }
+
+    private func persistFailedEntries(_ entries: [LogEntry]) async {
+        guard let persistence = configuration.persistence else { return }
+
+        do {
+            try await persistence.append(entries)
+        } catch {
+            // Persistence failure - entries may be lost
         }
     }
 }

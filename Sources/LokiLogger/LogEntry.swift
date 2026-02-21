@@ -4,7 +4,7 @@ import Darwin
 ///
 /// Timestamps are captured in nanoseconds since Unix epoch for
 /// compatibility with Loki's log format.
-public struct LogEntry: Sendable {
+public struct LogEntry: Sendable, Codable, Equatable {
 
     // MARK: - Properties
 

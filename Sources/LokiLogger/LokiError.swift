@@ -13,4 +13,10 @@ public enum LokiError: Error, Sendable {
 
     /// Failed to encode log entries to JSON.
     case encodingError(any Error & Sendable)
+
+    /// Failed to compress request body.
+    case compressionError(any Error & Sendable)
+
+    /// Failed to persist or recover log entries.
+    case persistenceError(any Error & Sendable)
 }

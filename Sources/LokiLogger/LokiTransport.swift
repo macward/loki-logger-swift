@@ -131,7 +131,7 @@ public struct LokiTransport: Sendable {
     }
 
     private func buildRequest(with payload: LokiPayload) throws -> URLRequest {
-        let data: Data
+        var data: Data
         do {
             data = try encoder.encode(payload)
         } catch {
@@ -140,8 +140,25 @@ public struct LokiTransport: Sendable {
 
         var request: URLRequest = URLRequest(url: configuration.endpoint)
         request.httpMethod = "POST"
-        request.httpBody = data
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        // Apply compression if enabled
+        if configuration.compressionEnabled {
+            do {
+                data = try data.gzipCompressed()
+                request.setValue("gzip", forHTTPHeaderField: "Content-Encoding")
+            } catch {
+                throw LokiError.compressionError(error)
+            }
+        }
+
+        request.httpBody = data
+
+        // Apply authentication headers
+        let authHeaders: [String: String] = configuration.authentication.headers()
+        for (key, value) in authHeaders {
+            request.setValue(value, forHTTPHeaderField: key)
+        }
 
         return request
     }
